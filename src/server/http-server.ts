@@ -104,15 +104,13 @@ export function startHttpServer(mcpServer: Server, port: number = 8080) {
         if (transport) {
           console.error(`[DEBUG] Using existing transport for session ID: ${clientSessionId}`);
         } else {
-          console.error(`[ERROR] Invalid or expired session ID provided: ${clientSessionId}. No active transport found.`);
-          res.status(400).json({
-            jsonrpc: '2.0',
-            error: { code: -32001, message: `Invalid or expired session ID: ${clientSessionId}. Please re-initialize.` },
-            id: req.body?.id || null
-          });
-          return;
+          console.error(`[WARN] Invalid or expired session ID provided: ${clientSessionId}. Creating new transport.`);
+          // Don't fail - allow re-initialization by creating a new transport
+          // This handles cases where: server restart, session timeout, or multi-instance scenarios
         }
-      } else {
+      }
+
+      if (!transport) {
         // No session ID provided by client, this should be an 'initialize' request or similar.
         console.error('[DEBUG] No session ID provided by client. Creating new transport.');
         const newGeneratedSessionId = randomUUID(); // Always generate a fresh ID for a new transport.
