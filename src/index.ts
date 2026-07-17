@@ -1466,9 +1466,103 @@ class GrocyApiServer {
     }
   }
 
+  /**
+   * Format a tool response with structured text (table) + raw JSON
+   * Implements Option #1: Structured Text with Clear Sections
+   */
+  private formatStructuredResponse(data: any, description: string): string {
+    let response = `Successfully ${description}\n\n`;
+
+    if (!data || (Array.isArray(data) && data.length === 0)) {
+      response += '**No results found.**';
+      return response;
+    }
+
+    // Handle array data
+    if (Array.isArray(data)) {
+      response += `**Results:** ${data.length} item${data.length !== 1 ? 's' : ''} found\n\n`;
+
+      // Create a table from array of objects
+      if (data.length > 0 && typeof data[0] === 'object' && data[0] !== null) {
+        response += this.createTableFromObjects(data);
+      }
+    } else if (typeof data === 'object' && data !== null) {
+      response += '**Results:** Single object\n\n';
+      response += this.createTableFromObjects([data]);
+    } else {
+      response += `**Result:** ${String(data)}\n\n`;
+    }
+
+    // Add raw JSON response
+    response += '\n**Raw Response Data:**\n```json\n';
+    response += this.safeJsonStringify(data);
+    response += '\n```';
+
+    return response;
+  }
+
+  /**
+   * Create a markdown table from an array of objects
+   * Shows up to 5 columns for readability
+   */
+  private createTableFromObjects(objects: any[]): string {
+    if (!objects || objects.length === 0) {
+      return '';
+    }
+
+    // Get all keys from first object
+    const firstObj = objects[0];
+    if (typeof firstObj !== 'object' || firstObj === null) {
+      return '';
+    }
+
+    let keys = Object.keys(firstObj);
+
+    // Limit to 5 most important columns (prefer common names)
+    const priorityKeys = ['id', 'name', 'title', 'status', 'date', 'created', 'updated', 'amount', 'quantity'];
+    const prioritized = keys.filter(k => priorityKeys.includes(k.toLowerCase()));
+    const remaining = keys.filter(k => !priorityKeys.includes(k.toLowerCase()));
+    keys = [...prioritized, ...remaining].slice(0, 5);
+
+    // Create header
+    let table = '| ' + keys.map(k => this.truncateString(k, 20)).join(' | ') + ' |\n';
+    table += '|' + keys.map(() => '---|').join('') + '\n';
+
+    // Create rows
+    for (const obj of objects) {
+      const row = keys.map(key => {
+        const val = obj[key];
+        let displayed = '';
+
+        if (val === null || val === undefined) {
+          displayed = '(empty)';
+        } else if (typeof val === 'string' && val.length > 20) {
+          displayed = this.truncateString(val, 20) + '...';
+        } else if (typeof val === 'object') {
+          displayed = typeof val;
+        } else {
+          displayed = String(val);
+        }
+
+        return displayed;
+      });
+      table += '| ' + row.join(' | ') + ' |\n';
+    }
+
+    return table;
+  }
+
+  /**
+   * Truncate a string to a maximum length
+   */
+  private truncateString(str: string, maxLen: number): string {
+    if (str.length <= maxLen) return str;
+    return str.substring(0, maxLen - 3) + '...';
+  }
+
   private async handleCustomGrocyApiCall(request: any) {
     const { endpoint, method = 'GET', body = null } = request.params.arguments;
-    
+
     if (!endpoint) {
       throw new McpError(
         ErrorCode.InvalidParams,
@@ -1478,14 +1572,14 @@ class GrocyApiServer {
 
     // Remove leading /api/ if present
     const cleanEndpoint = endpoint.replace(/^\/?(api\/)?/, '');
-    
+
     try {
       const data = await this.makeApiRequest(`/${cleanEndpoint}`, method, body);
       return {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify(data),
+            text: this.formatStructuredResponse(data, `called endpoint: ${endpoint}`),
           },
         ],
       };
@@ -1495,9 +1589,7 @@ class GrocyApiServer {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify({
-              error: `Failed to call Grocy API endpoint ${endpoint}: ${error.message}`
-            }),
+            text: `❌ Failed to call Grocy API endpoint ${endpoint}: ${error.message}`
           },
         ],
         isError: true,
@@ -1513,23 +1605,23 @@ class GrocyApiServer {
         const queryString = Object.entries(options.query_params)
           .map(([key, value]) => `${key}=${value}`)
           .join('&');
-        
+
         if (queryString) {
           adjustedEndpoint += `?${queryString}`;
         }
       }
-      
+
       const method = options.method || 'GET';
       const body = options.body || null;
       const additionalHeaders = options.headers || {};
       const isSpecial = options.is_special || false;
-      
+
       const data = await this.makeApiRequest(adjustedEndpoint, method, body, additionalHeaders, isSpecial);
       return {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify(data),
+            text: this.formatStructuredResponse(data, description),
           },
         ],
       };
@@ -1539,9 +1631,7 @@ class GrocyApiServer {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify({
-              error: `Failed to ${description.toLowerCase()}: ${error.message}`
-            }),
+            text: `❌ Failed to ${description.toLowerCase()}: ${error.message}`
           },
         ],
         isError: true,
@@ -1651,7 +1741,7 @@ class GrocyApiServer {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify(responseObj),
+            text: `✓ Test request completed\n\n**Status:** ${responseObj.response.statusCode} ${responseObj.response.statusText}\n**Timing:** ${responseObj.response.timing}\n**URL:** ${responseObj.request.url}\n\n**Response Data:**\n\`\`\`json\n${this.safeJsonStringify(responseObj)}\n\`\`\``
           },
         ],
       };
@@ -1661,21 +1751,15 @@ class GrocyApiServer {
           content: [
             {
               type: 'text',
-              text: this.safeJsonStringify({
-                error: {
-                  message: error.message,
-                  code: error.code,
-                  request: {
-                    url: `${process.env.GROCY_BASE_URL}${normalizedEndpoint}`,
-                    method: config.method,
-                    headers: {
-                      ...sanitizeHeaders(config.headers as Record<string, string | undefined>, false),
-                      ...sanitizeHeaders(request.params.arguments.headers || {}, true)
-                    },
-                    body: config.data
-                  }
-                }
-              }),
+              text: `❌ Test request failed\n\n**Error:** ${error.message}\n**Code:** ${error.code}\n\n**Request Details:**\n\`\`\`json\n${this.safeJsonStringify({
+                url: `${process.env.GROCY_BASE_URL}${normalizedEndpoint}`,
+                method: config.method,
+                headers: {
+                  ...sanitizeHeaders(config.headers as Record<string, string | undefined>, false),
+                  ...sanitizeHeaders(request.params.arguments.headers || {}, true)
+                },
+                body: config.data
+              })}\n\`\`\``
             },
           ],
           isError: true,
@@ -1687,7 +1771,7 @@ class GrocyApiServer {
 
   private async handleOpenProduct(request: any) {
     const { productId, stockEntryId, amount = 1, note } = request.params.arguments;
-    
+
     if (!productId && !stockEntryId) {
       throw new McpError(
         ErrorCode.InvalidParams,
@@ -1698,17 +1782,17 @@ class GrocyApiServer {
     // Construct the request body
     const body: any = { amount };
     if (note) body.note = note;
-    
+
     // If stockEntryId is provided, include it in the request
     if (stockEntryId) body.stock_entry_id = stockEntryId;
-    
+
     try {
       // If we don't have a productId but have a stockEntryId, we need to fetch the product ID first
       let targetProductId = productId;
-      
+
       if (!productId && stockEntryId) {
         console.error(`No product ID provided but stock entry ID ${stockEntryId} given. Attempting to get product ID from stock entry.`);
-        
+
         try {
           // First try to get the product ID from the stock entry
           const stockEntryData = await this.makeApiRequest(`/api/stock/entry/${stockEntryId}`, 'GET');
@@ -1724,22 +1808,22 @@ class GrocyApiServer {
           throw new Error(`Failed to get product ID from stock entry: ${stockEntryError.message}`);
         }
       }
-      
+
       if (!targetProductId) {
         throw new Error('Unable to determine product ID for open operation');
       }
-      
+
       // Use the proper path format with explicit /api prefix
       const endpoint = `/api/stock/products/${targetProductId}/open`;
       console.error(`Making open product request to ${endpoint} with body:`, body);
-      
+
       // Don't use isSpecial=true flag as we're now using the explicit /api prefix
       const data = await this.makeApiRequest(endpoint, 'POST', body);
       return {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify(data),
+            text: this.formatStructuredResponse(data, 'opened product'),
           },
         ],
       };
@@ -1749,11 +1833,7 @@ class GrocyApiServer {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify({
-              error: `Failed to open product: ${error.message}`,
-              help: "When using productId, Grocy will automatically use first-in-first-out for stock selection. For more precise control, use stockEntryId instead. To find valid stock entry IDs, use the get_product_entries tool with your productId.",
-              example: "Try using the get_product_entries tool with the product ID to find valid stock entries for a specific product"
-            }),
+            text: `❌ Failed to open product: ${error.message}\n\n**Troubleshooting:**\n- When using productId, Grocy uses first-in-first-out\n- For precise control, use stockEntryId instead\n- Use get_product_entries tool to find valid stock entries`
           },
         ],
         isError: true,
@@ -1769,7 +1849,7 @@ class GrocyApiServer {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify(data),
+            text: this.formatStructuredResponse(data, `retrieved fulfillment for recipe ${recipeId}`),
           },
         ],
       };
@@ -1778,9 +1858,7 @@ class GrocyApiServer {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify({
-              error: `Failed to get recipe fulfillment: ${error.message}`,
-            }),
+            text: `❌ Failed to get recipe fulfillment: ${error.message}`
           },
         ],
         isError: true,
@@ -1795,7 +1873,7 @@ class GrocyApiServer {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify(data),
+            text: this.formatStructuredResponse(data, 'retrieved all recipes fulfillment'),
           },
         ],
       };
@@ -1804,9 +1882,7 @@ class GrocyApiServer {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify({
-              error: `Failed to get all recipes fulfillment: ${error.message}`,
-            }),
+            text: `❌ Failed to get all recipes fulfillment: ${error.message}`
           },
         ],
         isError: true,
@@ -1822,7 +1898,7 @@ class GrocyApiServer {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify(data),
+            text: this.formatStructuredResponse(data, `added recipe ${recipeId} products to shopping list`),
           },
         ],
       };
@@ -1831,9 +1907,7 @@ class GrocyApiServer {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify({
-              error: `Failed to add recipe products to shopping list: ${error.message}`,
-            }),
+            text: `❌ Failed to add recipe products to shopping list: ${error.message}`
           },
         ],
         isError: true,
@@ -1843,7 +1917,7 @@ class GrocyApiServer {
 
   private async handleUndoAction(request: any) {
     const { entityType, id } = request.params.arguments;
-    
+
     let endpoint;
     switch (entityType.toLowerCase()) {
       case 'chore':
@@ -1863,22 +1937,20 @@ class GrocyApiServer {
           content: [
             {
               type: 'text',
-              text: this.safeJsonStringify({
-                error: `Unsupported entity type: ${entityType}`,
-              }),
+              text: `❌ Unsupported entity type: ${entityType}`
             },
           ],
           isError: true,
         };
     }
-    
+
     try {
       const data = await this.makeApiRequest(endpoint, 'POST');
       return {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify(data),
+            text: this.formatStructuredResponse(data, `undone ${entityType} action`),
           },
         ],
       };
@@ -1887,9 +1959,7 @@ class GrocyApiServer {
         content: [
           {
             type: 'text',
-            text: this.safeJsonStringify({
-              error: `Failed to undo ${entityType} action: ${error.message}`,
-            }),
+            text: `❌ Failed to undo ${entityType} action: ${error.message}`
           },
         ],
         isError: true,
