@@ -50,6 +50,34 @@ export function startHttpServer(mcpServer: Server, port: number = 8080) {
     next();
   });
 
+  // GET handler for /mcp endpoint (informational)
+  app.get('/mcp', (req, res) => {
+    res.json({
+      status: 'ok',
+      service: SERVER_NAME,
+      version: VERSION,
+      message: 'MCP Streamable HTTP endpoint',
+      info: 'This endpoint accepts POST requests for MCP protocol communication',
+      usage: {
+        method: 'POST',
+        contentType: 'application/json',
+        accept: 'application/json or text/event-stream',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Mcp-Session-Id': '(optional) session ID for persistent sessions'
+        },
+        example: 'POST /mcp with JSON-RPC 2.0 request body'
+      },
+      endpoints: {
+        health: '/',
+        streamableHttp: '/mcp (POST only)',
+        sse: '/mcp/sse',
+        sseMessages: '/mcp/messages'
+      }
+    });
+  });
+
   // Streamable HTTP endpoint (Context7 modern)
   app.post('/mcp', async (req, res) => {
     try {
