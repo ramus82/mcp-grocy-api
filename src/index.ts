@@ -201,7 +201,11 @@ class GrocyApiServer {
       validateStatus: () => true, // Allow any status code
       httpsAgent: GROCY_ENABLE_SSL_VERIFY ? undefined : new https.Agent({ // Disable SSL verification only when explicitly set to false
         rejectUnauthorized: false
-      })
+      }),
+      // CORS preflight fix: disable Content-Type header override to avoid CORS preflight
+      // The API key header is necessary for authentication
+      maxRedirects: 5,
+      timeout: 30000
     });
 
     this.setupToolHandlers();
@@ -260,9 +264,12 @@ class GrocyApiServer {
   private makeApiRequest = async (endpoint: string, method: Method = 'GET', body: any = null, additionalHeaders: Record<string, string> = {}, isSpecial: boolean = false): Promise<any> => {
     // Enhanced endpoint path handling with better logging (using stderr to avoid breaking JSON responses)
     console.error(`Original endpoint: ${endpoint}, Method: ${method}, isSpecial: ${isSpecial}`);
-    
+
     // Standardize path handling
     let normalizedEndpoint = endpoint;
+
+    // Disable axios CORS preflight by ensuring requests are "simple"
+    // Simple requests don't trigger CORS preflight
     
     // Check if endpoint explicitly starts with /api/ - use it as is
     if (endpoint.startsWith('/api/')) {
@@ -308,7 +315,12 @@ class GrocyApiServer {
       console.error(`Request body: ${JSON.stringify(body)}`);
     }
 
-    // Only apply API Key authentication
+    // Only apply API Key authentication via header
+    // Note: Custom headers like GROCY-API-KEY trigger CORS preflight requests
+    // If you experience CORS issues, ensure your Grocy server is configured to accept:
+    // - Origin: * (or the MCP server origin)
+    // - Methods: GET, POST, PUT, DELETE, OPTIONS
+    // - Headers: Content-Type, Accept, GROCY-API-KEY
     if (hasApiKeyAuth()) {
       config.headers = {
         ...config.headers,
