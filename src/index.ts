@@ -265,35 +265,20 @@ class GrocyApiServer {
     // Enhanced endpoint path handling with better logging (using stderr to avoid breaking JSON responses)
     console.error(`Original endpoint: ${endpoint}, Method: ${method}, isSpecial: ${isSpecial}`);
 
-    // Standardize path handling
+    // Standardize path handling - FIX: prevent double /api/ prefixes
     let normalizedEndpoint = endpoint;
 
-    // Disable axios CORS preflight by ensuring requests are "simple"
-    // Simple requests don't trigger CORS preflight
-    
-    // Check if endpoint explicitly starts with /api/ - use it as is
-    if (endpoint.startsWith('/api/')) {
+    // If already has /api/ prefix or is just /api, use as-is
+    if (endpoint.includes('/api/')) {
       normalizedEndpoint = endpoint;
-    } 
-    // Handle endpoints that start with api/ without leading slash
-    else if (endpoint.startsWith('api/')) {
-      normalizedEndpoint = `/${endpoint}`;
     }
-    // Special handling for stock operations if isSpecial is true (legacy support)
-    else if (isSpecial && endpoint.includes('stock/products/')) {
-      if (endpoint.startsWith('/')) {
-        normalizedEndpoint = `/api${endpoint}`;
-      } else {
-        normalizedEndpoint = `/api/${endpoint}`;
-      }
+    // If starts with /, add /api only if not already there
+    else if (endpoint.startsWith('/')) {
+      normalizedEndpoint = `/api${endpoint}`;
     }
-    // All other endpoints - ensure they start with /api/
+    // If no leading slash, add it with /api/
     else {
-      if (endpoint.startsWith('/')) {
-        normalizedEndpoint = `/api${endpoint}`;
-      } else {
-        normalizedEndpoint = `/api/${endpoint}`;
-      }
+      normalizedEndpoint = `/api/${endpoint}`;
     }
     
     console.error(`Final endpoint URL: ${normalizeBaseUrl(process.env.GROCY_BASE_URL!)}${normalizedEndpoint}`);
