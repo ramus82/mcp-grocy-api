@@ -7,6 +7,9 @@
 > or ship updates. This repository has been archived as of 2026-05-27.
 > If you'd like to continue development, please fork and maintain your own
 > version, or look for an active community fork.
+>
+> The changes in this project are not merged with maintainer's (saya6k) repo 
+
 
 [![npm version](https://img.shields.io/npm/v/mcp-grocy-api.svg)](https://www.npmjs.com/package/mcp-grocy-api)
 [![Docker Image](https://img.shields.io/badge/docker%20image-ghcr.io-blue)](https://github.com/saya6k/mcp-grocy-api/pkgs/container/mcp-grocy-api)
