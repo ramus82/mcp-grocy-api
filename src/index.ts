@@ -263,25 +263,33 @@ class GrocyApiServer {
   
   private makeApiRequest = async (endpoint: string, method: Method = 'GET', body: any = null, additionalHeaders: Record<string, string> = {}, isSpecial: boolean = false): Promise<any> => {
     // Enhanced endpoint path handling with better logging (using stderr to avoid breaking JSON responses)
-    console.error(`Original endpoint: ${endpoint}, Method: ${method}, isSpecial: ${isSpecial}`);
+    console.error(`[TRACE] Original endpoint: "${endpoint}", Method: ${method}, isSpecial: ${isSpecial}`);
 
     // Standardize path handling - FIX: prevent double /api/ prefixes
     let normalizedEndpoint = endpoint;
 
+    // Debug each condition
+    console.error(`[TRACE] Checking if endpoint includes '/api/': ${endpoint.includes('/api/')}`);
+    console.error(`[TRACE] Checking if endpoint starts with '/': ${endpoint.startsWith('/')}`);
+
     // If already has /api/ prefix or is just /api, use as-is
     if (endpoint.includes('/api/')) {
       normalizedEndpoint = endpoint;
+      console.error(`[TRACE] Already has /api/, using as-is`);
     }
     // If starts with /, add /api only if not already there
     else if (endpoint.startsWith('/')) {
       normalizedEndpoint = `/api${endpoint}`;
+      console.error(`[TRACE] Starts with /, adding /api prefix`);
     }
     // If no leading slash, add it with /api/
     else {
       normalizedEndpoint = `/api/${endpoint}`;
+      console.error(`[TRACE] No leading slash, adding /api/`);
     }
-    
-    console.error(`Final endpoint URL: ${normalizeBaseUrl(process.env.GROCY_BASE_URL!)}${normalizedEndpoint}`);
+
+    console.error(`[TRACE] Final normalized endpoint: "${normalizedEndpoint}"`);
+    console.error(`[TRACE] Final endpoint URL: ${normalizeBaseUrl(process.env.GROCY_BASE_URL!)}${normalizedEndpoint}`);
 
     const config: AxiosRequestConfig = {
       method,
